@@ -54,6 +54,7 @@ public class EC2RetentionStrategy extends RetentionStrategy<EC2Computer> {
 
     private transient ReentrantLock checkLock;
     private static final int STARTUP_TIME_DEFAULT_VALUE = 30;
+    private static final int STRATEGY_CHECK_AGAIN_MINUTES_DEFAULT_VALUE = 45;
     //ec2 instances charged by hour, time less than 1 hour is acceptable
     private static final int STARTUP_TIMEOUT = NumberUtils.toInt(
             System.getProperty(EC2RetentionStrategy.class.getCanonicalName() + ".startupTimeout",
@@ -79,7 +80,7 @@ public class EC2RetentionStrategy extends RetentionStrategy<EC2Computer> {
     @Override
     public long check(EC2Computer c) {
         if (!checkLock.tryLock()) {
-            return 1;
+            return STRATEGY_CHECK_AGAIN_MINUTES_DEFAULT_VALUE;
         } else {
             try {
                 return internalCheck(c);
@@ -94,7 +95,7 @@ public class EC2RetentionStrategy extends RetentionStrategy<EC2Computer> {
         * If we've been told never to terminate, or node is null(deleted), no checks to perform
         */
         if (idleTerminationMinutes == 0 || computer.getNode() == null) {
-            return 1;
+            return STRATEGY_CHECK_AGAIN_MINUTES_DEFAULT_VALUE;
         }
 
 
@@ -106,12 +107,12 @@ public class EC2RetentionStrategy extends RetentionStrategy<EC2Computer> {
                 // We'll just retry next time we test for idleness.
                 LOGGER.fine("Exception while checking host uptime for " + computer.getName()
                         + ", will retry next check. Exception: " + e);
-                return 1;
+                return STRATEGY_CHECK_AGAIN_MINUTES_DEFAULT_VALUE;
             }
             //on rare occasions, AWS may return fault instance which shows running in AWS console but can not be connected.
             //need terminate such fault instance by {@link #STARTUP_TIMEOUT}
             if (computer.isOffline() && uptime < TimeUnit2.MINUTES.toMillis(STARTUP_TIMEOUT)) {
-                return 1;
+                return STRATEGY_CHECK_AGAIN_MINUTES_DEFAULT_VALUE;
             }
             final long idleMilliseconds = System.currentTimeMillis() - computer.getIdleStartMilliseconds();
             if (idleTerminationMinutes > 0) {
@@ -137,7 +138,7 @@ public class EC2RetentionStrategy extends RetentionStrategy<EC2Computer> {
                 }
             }
         }
-        return 1;
+        return STRATEGY_CHECK_AGAIN_MINUTES_DEFAULT_VALUE;
     }
 
     /**
